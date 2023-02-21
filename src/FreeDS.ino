@@ -55,7 +55,6 @@ extern "C"
 #include <freertos/FreeRTOS.h>
 #include <freertos/timers.h>
 #include <rom/rtc.h>
-#include <driver/dac.h>
 #include <driver/adc.h>
 #include <esp_system.h>
 #include <time.h>
@@ -877,8 +876,6 @@ void setup()
   ledcAttachPin(pin_pwm, 2);
   ledcSetup(2, (double)config.pwmFrequency / 10.0, 10); // Frecuencia según configuración, 10-bit resolution
   ledcWrite(2, 0); // turn off
-
-  dac_output_enable(DAC_CHANNEL_2); // Salida Analógica /// DAC_CHANNEL_1 -> PIN 25 /// DAC_CHANNEL_2 -> PIN 26
 
   // OLED
 #ifdef OLED
