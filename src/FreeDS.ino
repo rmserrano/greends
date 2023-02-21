@@ -72,7 +72,7 @@ extern "C"
 
 #ifdef OLED
   // PWM Pin
-  #define pin_pwm 25 // Cambiar a 25
+  #define pin_pwm LED 
 
   // ESP Serial
   #define pin_rx 17
