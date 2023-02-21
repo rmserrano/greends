@@ -88,7 +88,7 @@ extern "C"
   #define ADC_INPUT 34
 
   #include "SSD1306.h"
-  SSD1306 display(0x3c, 4, 15);
+  SSD1306 display(0x3c, SDA_OLED, SCL_OLED);
 #endif
 
 // PARTIAL UNSUPPORTED, you must define your own pins to use this module.
@@ -882,10 +882,10 @@ void setup()
 
   // OLED
 #ifdef OLED
-  pinMode(16, OUTPUT);
-  digitalWrite(16, LOW); // set GPIO16 low to reset OLED
+  pinMode(RST_OLED, OUTPUT);
+  digitalWrite(RST_OLED, LOW); // set GPIO16 low to reset OLED
   delay(50);
-  digitalWrite(16, HIGH); // while OLED is running, must set GPIO16 in high
+  digitalWrite(RST_OLED, HIGH); // while OLED is running, must set GPIO16 in high
 
   display.init();
   display.setBrightness(config.oledBrightness);
