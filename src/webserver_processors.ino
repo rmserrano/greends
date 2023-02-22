@@ -37,33 +37,9 @@ String workingModeString(void)
   {
     return "MQTT Server (Tasmota Json)";
   }
-  if (config.wversion == DDS238_METER)
-  {
-    return "Meter DDS238-2(4) Modbus";
-  }
-  if (config.wversion == DDSU666_METER)
-  {
-    return "Meter DDSU666 Modbus";
-  }
-  if (config.wversion == SDM_METER)
-  {
-    return "Meter SDM120 / SDM220 Modbus";
-  }
   if (config.wversion == GOODWE)
   {
     return "GoodWe ES/EM";
-  }
-  if (config.wversion == MUSTSOLAR)
-  {
-    return "MustSolar Modbus (En desarrollo)";
-  }
-  if (config.wversion == SMA_BOY)
-  {
-    return "SMA (Sunny Boy)";
-  }
-  if (config.wversion == SMA_ISLAND)
-  {
-    return "SMA (Sunny Island)";
   }
   if (config.wversion == WIBEEE)
   {
@@ -85,34 +61,6 @@ String workingModeString(void)
   {
     return "ICC Solar (Mqtt)";
   }
-  if (config.wversion == VICTRON)
-  {
-    return "Victron Modbus TCP";
-  }
-  if (config.wversion == FRONIUS_MODBUS)
-  {
-    return "Fronius Modbus TCP";
-  }
-  if (config.wversion == HUAWEI_MODBUS)
-  {
-    return "Huawei Modbus TCP";
-  }
-  if (config.wversion == SOLAREDGE)
-  {
-    return "SolarEdge Modbus TCP";
-  }
-  if (config.wversion == WIBEEE_MODBUS)
-  {
-    return "Wibeee Modbus TCP (En desarrollo)";
-  }
-  if (config.wversion == SCHNEIDER)
-  {
-    return "Schneider Modbus TCP (En desarrollo)";
-  }
-  if (config.wversion == INGETEAM)
-  {
-    return "Ingeteam Modbus TCP";
-  }
   return String();
 }
 
@@ -131,34 +79,8 @@ String processorFreeDS(const String &var)
            String((config.wversion == FRONIUS_API) ? " selected='selected' " : " ") + ">Fronius (API)</option>" +
                                                                               "<option value='" + String(MQTT_BROKER) + "'" +
            String((config.wversion == MQTT_BROKER) ? " selected='selected' " : " ") + ">MQTT Server (Tasmota Json)</option>"
-                                                                              "<option value='" + String(DDS238_METER) + "'" +
-           String((config.wversion == DDS238_METER) ? " selected='selected' " : " ") + ">Meter DDS238-2(4) Modbus</option>"
-                                                                              "<option value='" + String(DDSU666_METER) + "'" +
-           String((config.wversion == DDSU666_METER) ? " selected='selected' " : " ") + ">Meter DDSU666 Modbus</option>"
-                                                                              "<option value='" + String(SDM_METER) + "'" +
-           String((config.wversion == SDM_METER) ? " selected='selected' " : " ") + ">Meter SDM120 / SDM220 Modbus</option>"
                                                                               "<option value='"+ String(GOODWE) + "'" +
            String((config.wversion == GOODWE) ? " selected='selected' " : " ") + ">Goodwe ES/EM</option>"
-                                                                              "<option value='"+ String(MUSTSOLAR) + "'" +
-           String((config.wversion == MUSTSOLAR) ? " selected='selected' " : " ") + ">MustSolar Modbus (En desarrollo)</option>"
-                                                                              "<option value='" + String(SMA_BOY) + "'" +
-           String((config.wversion == SMA_BOY) ? " selected='selected' " : " ") + ">SMA (Sunny Boy)</option>"
-                                                                              "<option value='" + String(SMA_ISLAND) + "'" +
-           String((config.wversion == SMA_ISLAND) ? " selected='selected' " : " ") + ">SMA (Sunny Island)</option>"
-                                                                              "<option value='" + String(VICTRON) + "'" +
-           String((config.wversion == VICTRON) ? " selected='selected' " : " ") + ">Victron Modbus TCP</option>" +
-                                                                              "<option value='" + String(FRONIUS_MODBUS) + "'" +
-           String((config.wversion == FRONIUS_MODBUS) ? " selected='selected' " : " ") + ">Fronius Modbus TCP</option>" +
-                                                                              "<option value='" + String(HUAWEI_MODBUS) + "'" +
-           String((config.wversion == HUAWEI_MODBUS) ? " selected='selected' " : " ") + ">Huawei Modbus TCP</option>" +
-                                                                              "<option value='" + String(SOLAREDGE) + "'" +
-           String((config.wversion == SOLAREDGE) ? " selected='selected' " : " ") + ">SolarEdge Modbus TCP</option>" +
-                                                                              "<option value='" + String(SCHNEIDER) + "'" +
-           String((config.wversion == SCHNEIDER) ? " selected='selected' " : " ") + ">Schneider Modbus TCP (En desarrollo)</option>" +
-                                                                              "<option value='" + String(INGETEAM) + "'" +
-           String((config.wversion == INGETEAM) ? " selected='selected' " : " ") + ">Ingeteam Modbus TCP</option>" +
-                                                                              "<option value='" + String(WIBEEE_MODBUS) + "'" +
-           String((config.wversion == WIBEEE_MODBUS) ? " selected='selected' " : " ") + ">Wibeee Modbus TCP (En desarrollo)</option>" +
                                                                               "<option value='" + String(WIBEEE) + "'" +
            String((config.wversion == WIBEEE) ? " selected='selected' " : " ") + ">Wibeee</option>" +
                                                                               "<option value='" + String(SHELLY_EM) + "'" +                                                                   
@@ -445,12 +367,6 @@ String processorConfig(const String &var)
              wifi += "</select></div>";
       return wifi;
     }
-    if (config.wversion >= MODBUS_TCP && config.wversion <= (MODBUS_TCP + MODE_STEP - 1))
-    {
-      return "<label id='labelModo' class='col-sm-4 form-control-label'>IP Modbus TCP:</label>"
-             "<div id='divModo' class='col-sm-8 mg-t-10 mg-sm-t-0'><input id='wifis' type=\"text\" class=\"form-control select2\" maxlength=\"30\" value=\"" +
-             String(config.sensor_ip) + "\" name=\"wifis\"/></div>";
-    }
     if (config.wversion == WIBEEE)
     {
       return "<label id='labelModo' class='col-sm-4 form-control-label'>IP Wibeee:</label>"
@@ -487,26 +403,6 @@ String processorConfig(const String &var)
       return "<label id='labelModo' class='col-sm-4 form-control-label'>MQTT Broker:</label>"
              "<div id='divModo' class='col-sm-8 mg-t-10 mg-sm-t-0'><input id='wifis' type=\"text\" class=\"form-control select2\" maxlength=\"30\" value=\"" +
              String(config.MQTT_broker) + "\" name=\"wifis\" disabled /></div>";
-    }
-    if (config.wversion == DDS238_METER)
-    {
-      return "<label id='labelModo' class='col-sm-4 form-control-label'>Modbus:</label>"
-             "<div id='divModo' class='col-sm-8 mg-t-10 mg-sm-t-0'><input id='wifis' type=\"text\" class=\"form-control select2\" maxlength=\"30\" value=\"DDS238-2\" name=\"wifis\" disabled /></div>";
-    }
-    if (config.wversion == DDSU666_METER)
-    {
-      return "<label id='labelModo' class='col-sm-4 form-control-label'>Modbus:</label>"
-             "<div id='divModo' class='col-sm-8 mg-t-10 mg-sm-t-0'><input id='wifis' type=\"text\" class=\"form-control select2\" maxlength=\"30\" value=\"DDSU666\" name=\"wifis\" disabled /></div>";
-    }
-    if (config.wversion == SDM_METER)
-    {
-      return "<label id='labelModo' class='col-sm-4 form-control-label'>Modbus:</label>"
-             "<div id='divModo' class='col-sm-8 mg-t-10 mg-sm-t-0'><input id='wifis' type=\"text\" class=\"form-control select2\" maxlength=\"30\" value=\"SDM120 / SDM 220\" name=\"wifis\" disabled /></div>";
-    }
-    if (config.wversion == MUSTSOLAR)
-    {
-      return "<label id='labelModo' class='col-sm-4 form-control-label'>Modbus:</label>"
-             "<div id='divModo' class='col-sm-8 mg-t-10 mg-sm-t-0'><input id='wifis' type=\"text\" class=\"form-control select2\" maxlength=\"30\" value=\"MustSolar\" name=\"wifis\" disabled /></div>";
     }
   }
 

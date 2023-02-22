@@ -130,12 +130,7 @@ void handleConfig(AsyncWebServerRequest *request)
   } else {
     config.flags.changeGridSign = false;
   }
-  
-  if (request->hasArg("baudiosmeter")) {
-    config.baudiosMeter = constrain(request->arg("baudiosmeter").toInt(), 300, 38400);
-    SerieMeter.updateBaudRate(config.baudiosMeter);
-  }
-  
+
   if (request->hasArg("idmeter")) {
     config.idMeter = constrain(request->arg("idmeter").toInt(), 1, 250);
   }
@@ -150,8 +145,6 @@ void handleConfig(AsyncWebServerRequest *request)
     else if (config.wversion >= SOLAX_V2_LOCAL && config.wversion <= MODE_WIDTH)
     {
       strcpy(config.sensor_ip, request->urlDecode(request->arg("wifis")).c_str());
-      modbustcp = NULL;
-      modbusIP.fromString((String)config.sensor_ip);
     }
   }
   
@@ -375,11 +368,6 @@ const char *sendJsonWeb(void)
 
     switch (config.wversion)
     {
-      case VICTRON:
-        if (config.flags.useSolarAsMPTT) { dtostrfd((inverter.wsolar + inverter.acIn + inverter.acOut), 2, tmpString); }
-        else { dtostrfd(inverter.wsolar, 2, tmpString); }
-        break;
-      
       default:
         dtostrfd(inverter.wsolar, 2, tmpString);
         break;
@@ -406,10 +394,6 @@ const char *sendJsonWeb(void)
   if (webMonitorFields.loadWatts) {
     switch (config.wversion)
     {
-      case INGETEAM:
-        config.flags.changeGridSign ? dtostrfd(inverter.loadWatts + inverter.wgrid, 2, tmpString) : dtostrfd(inverter.loadWatts - inverter.wgrid, 2, tmpString);
-        break;
-      
       default:
         dtostrfd(inverter.loadWatts, 2, tmpString);
         break;
@@ -844,18 +828,6 @@ void setWebConfig(void)
     }
     
     setGetDataTime();
-
-    modbustcp = NULL;
-
-    if (config.wversion >= MODBUS_TCP && config.wversion <= (MODBUS_TCP + MODE_STEP - 1))
-    {
-      modbusIP.fromString((String)config.sensor_ip);
-
-      if (config.wversion == SOLAREDGE) {
-        modbustcp = new esp32ModbusTCP(modbusIP, 1502);
-      } else { modbustcp = new esp32ModbusTCP(modbusIP, 502); }
-      configModbusTcp();
-    }
 
     if (config.wversion == GOODWE) {
       inverterUDP.begin(localUdpPort);

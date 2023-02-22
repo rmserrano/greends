@@ -49,16 +49,6 @@ void showOledData(void)
         display.setTextAlignment(TEXT_ALIGN_LEFT);
         switch (wversion)
         {
-          case DDS238_METER:
-          case DDSU666_METER:
-          case SDM_METER:
-            display.drawString(0, 0, (Flags.flash ? lang._VOLTAGE_ : lang._CURRENT_));
-            break;
-          case VICTRON:
-          case SMA_ISLAND:
-          case SCHNEIDER:
-            display.drawString(0, 0, lang._BATTERY_);
-            break;
           default:
             display.drawString(0, 0, lang._SOLAR_);
             break;
@@ -68,12 +58,6 @@ void showOledData(void)
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
         switch (wversion)
         {
-          case SMA_ISLAND:
-            display.drawString(128, 0, "SoC");
-            break;
-          case SCHNEIDER:
-            display.drawString(128, 0, "Volts");
-            break;
           default:
             display.drawString(128, 0, lang._GRID_);
             break;
@@ -86,17 +70,6 @@ void showOledData(void)
         display.setTextAlignment(TEXT_ALIGN_LEFT);
         switch (wversion)
         {
-          case DDS238_METER:
-          case DDSU666_METER:
-          case SDM_METER:
-            display.setFont(ArialMT_Plain_16);
-            display.drawString(0, 14, (Flags.flash ? String(meter.voltage) : String(meter.current)));
-            break;
-          case VICTRON:
-          case SMA_ISLAND:
-          case SCHNEIDER:
-            display.drawString(0, 12, (String)(int)inverter.batteryWatts);
-            break;
           default:
             display.drawString(0, 12, (String)(int)inverter.wsolar);
             break;
@@ -106,12 +79,6 @@ void showOledData(void)
         display.setTextAlignment(TEXT_ALIGN_RIGHT);
         switch (wversion)
         {
-          case SMA_ISLAND:
-            display.drawString(128, 12, (String)(int)inverter.batterySoC + "%");
-            break;
-          case SCHNEIDER:
-            display.drawString(128, 12, (String)(int)meter.voltage);
-            break;
           default:
             display.drawString(128, 12, (String)(int)inverter.wgrid);
             break;
@@ -136,26 +103,8 @@ void showOledData(void)
             case MQTT_BROKER:
               display.drawString(69, 0, "MQTT");
               break;
-            case DDS238_METER:
-              display.drawString(69, 0, "m238");
-              break;
-            case DDSU666_METER:
-              display.drawString(69, 0, "m666");
-              break;
-            case SDM_METER:
-              display.drawString(69, 0, "mSDM");
-              break;
-            case MUSTSOLAR:
-              display.drawString(69, 0, "MSTS");
-              break;
             case GOODWE:
               display.drawString(69, 0, "GDWE");
-              break;
-            case SMA_BOY:
-              display.drawString(69, 0, "SMAB");
-              break;
-            case SMA_ISLAND:
-              display.drawString(69, 0, "SMAI");
               break;
             case WIBEEE:
               display.drawString(69, 0, "WIBE");
@@ -168,18 +117,6 @@ void showOledData(void)
               break;
             case ICC_SOLAR:
               display.drawString(69, 0, "ICCS");
-              break;
-            case VICTRON:
-              display.drawString(69, 0, "VICT");
-              break;
-            case FRONIUS_MODBUS:
-              display.drawString(69, 0, "FBUS");
-              break;
-            case HUAWEI_MODBUS:
-              display.drawString(69, 0, "HWEI");
-              break;
-            case SCHNEIDER:
-              display.drawString(69, 0, "SCHN");
               break;
           }
         }
@@ -228,46 +165,11 @@ void showOledData(void)
         break;
 
       case 1: // Strings Info
-          if (wversion < DDS238_METER || wversion > SDM_METER) {
-            display.clear();
-            display.setFont(ArialMT_Plain_10);
-            display.setTextAlignment(TEXT_ALIGN_CENTER);
-            display.drawString(64, 0, lang. _INVERTERINFO_);
-            display.drawString(19, 12, lang._OLEDPOWER_);
-            display.drawString(60, 12, lang._GRID_);
-            display.drawString(102, 12, lang._OLEDTODAY_);
-            display.drawString(19, 22, (String(int(inverter.wsolar)) + "W"));
-            display.drawString(60, 22, (String(int(inverter.wgrid)) + "W"));
-            display.drawString(102, 22, String(inverter.wtoday) + "Kw");
-            display.drawString(30, 34, "STRING 1");
-            display.drawString(30, 44, (String(int(inverter.pw1)) + "W"));
-            display.drawString(30,  54, (String(int(inverter.pv1v)) + "V " + String(inverter.pv1c) + "A"));
-            display.drawString(100, 34, "STRING 2");
-            display.drawString(100, 44, (String(int(inverter.pw2)) + "W"));
-            display.drawString(100,  54, (String(int(inverter.pv2v)) + "V " + String(inverter.pv2c) + "A"));
-            display.display();
-          } else { button.screen++; }
+          button.screen++;
           break;
       
       case 2: // Meters
-          if (wversion >= DDS238_METER && wversion <= SDM_METER) {
-            display.clear();
-            display.setFont(ArialMT_Plain_10);
-            display.setTextAlignment(TEXT_ALIGN_CENTER);
-            display.drawString(64, 0, lang. _METERINFO_);
-            display.drawString(19, 12, lang._OLEDPOWER_);
-            display.drawString(60, 12, lang._VOLTAGE_);
-            display.drawString(102, 12, lang._CURRENT_);
-            display.drawString(19, 22, (String(int(meter.activePower)) + "W"));
-            display.drawString(60, 22, (String(int(meter.voltage)) + "V"));
-            display.drawString(102, 22, String(meter.current) + "A");
-            display.drawString(30, 34, lang._IMPORT_);
-            display.drawString(30, 44, (String(meter.importActive) + "KWH"));
-            display.drawString(100, 34, lang._EXPORT_);
-            display.drawString(100, 44, (String(meter.exportActive) + "KWH"));
-            display.drawString(64,  54, ("Total: " + String(meter.energyTotal) + "KWH"));
-            display.display();
-          } else { button.screen++; }
+          button.screen++;
           break;
 
       case 3: // Wifi Info

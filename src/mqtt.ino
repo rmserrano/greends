@@ -465,8 +465,6 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
       button.screen = constrain(int(payload[0] - '0'), 0, MAX_SCREENS);
       INFOV("Mqtt - Change to Screen: %i\n", button.screen);      
       
-      if (config.wversion >= (MODBUS_RTU + MODE_STEP) && button.screen == 2) { button.screen = 1; }
-      if ((config.wversion >= MODBUS_RTU && config.wversion <= (MODBUS_RTU + MODE_STEP - 1)) && button.screen == 1) { button.screen = 2; }
       if (!config.flags.sensorTemperatura && button.screen == 5) { button.screen = 6; }
       return;
     }
@@ -619,29 +617,5 @@ void publishMqtt()
       publisher("domoticz/in", tmpTopic);
     }
 
-    if (config.wversion >= MODBUS_RTU && config.wversion <= (MODBUS_RTU + MODE_STEP - 1))
-    {
-
-      DynamicJsonDocument jsonValues(512);
-      static char buffer[512];
-
-      jsonValues["Power"] = meter.activePower;
-      jsonValues["Voltage"] = meter.voltage;
-      jsonValues["Current"] = meter.current;
-      jsonValues["Frequency"] = meter.frequency;
-      jsonValues["Factor"] = meter.powerFactor;
-      jsonValues["EnergyTotal"] = meter.energyTotal;
-      jsonValues["AparentPower"] = meter.aparentPower;
-      jsonValues["ReactivePower"] = meter.reactivePower;
-      jsonValues["ImportActive"] = meter.importActive;
-      jsonValues["ExportActive"] = meter.exportActive;
-      jsonValues["ImportReactive"] = meter.importReactive;
-      jsonValues["ExportReactive"] = meter.exportReactive;
-      jsonValues["PhaseAngle"] = meter.phaseAngle;
-      size_t n = serializeJson(jsonValues, buffer);
-
-      sprintf(tmpTopic, "%s/Meter", config.hostServer);
-      mqttClient.publish(tmpTopic, 0, true, buffer, n);
-    }
   }
 }

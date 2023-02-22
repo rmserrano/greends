@@ -42,7 +42,6 @@
 #include <SPIFFS.h>
 #include <bitmap.h>
 #include <DNSServer.h>
-#include <esp32ModbusTCP.h>
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -549,11 +548,7 @@ AsyncEventSource events("/events");
 AsyncEventSource webLogs("/weblog");
 AsyncMqttClient mqttClient;
 
-static esp32ModbusTCP *modbustcp = NULL;
-IPAddress modbusIP;
-
 HardwareSerial SerieEsp(2);   // RX, TX para esp-01
-HardwareSerial SerieMeter(1); // RX, TX para los Meter rs485/modbus
 DynamicJsonDocument root(4096); // 3072
 
 TickerScheduler Tickers(7);
@@ -955,21 +950,9 @@ void setup()
       Flags.pwmIsWorking = true;
 
       // SERIAL
-      SerieMeter.begin(config.baudiosMeter, SERIAL_8N1, RX1, TX1); // UART1 para meter
       SerieEsp.begin(115200, SERIAL_8N1, pin_rx, pin_tx); // UART2 para ESP01
       
       if (config.wversion == SOLAX_V2) { SerieEsp.printf("SSID: %s\n", config.ssid_esp01); }
-
-      if (config.wversion >= MODBUS_TCP && config.wversion <= (MODBUS_TCP + MODE_STEP - 1))
-      {
-        modbusIP.fromString((String)config.sensor_ip);
-
-        if (config.wversion == SOLAREDGE) {
-          modbustcp = new esp32ModbusTCP(modbusIP, 1502);
-        } else { modbustcp = new esp32ModbusTCP(modbusIP, 502); }
-
-        configModbusTcp();
-      }
 
       INFOV("Welcome to FreeDS\n");
       INFOV("Hostname: %s\n", config.hostServer);

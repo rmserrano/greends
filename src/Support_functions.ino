@@ -35,21 +35,6 @@ void getSensorData(void)
       case SLAVE_MODE: // Master FreeDS
         runAsyncClient();
         break;
-      case DDS238_METER: // DDS2382
-      case DDSU666_METER: // DDSU666
-      case SDM_METER: // SDM120/220
-      case SMA_BOY: // SMA
-      case SMA_ISLAND: // SMA
-      case VICTRON: // Victron
-      case FRONIUS_MODBUS: // Fronius Modbus
-      case HUAWEI_MODBUS: // Huawei
-      case SOLAREDGE: // SolarEdge
-      case WIBEEE_MODBUS: // Wibeee Modbus
-      case INGETEAM: // Ingeteam Modbus
-      case SCHNEIDER:
-      case MUSTSOLAR: // MustSolar
-        readModbus();
-        break;
       case GOODWE: // GoodWe
         sendUDPRequest();
         break;
@@ -73,17 +58,6 @@ void setGetDataTime(void)
     case SLAVE_MODE:
       if (config.getDataTime < 1000) config.getDataTime = 1000;
       break;
-    case FRONIUS_MODBUS:
-      if (config.getDataTime < 250) config.getDataTime = 250;
-      break;
-    case SMA_BOY:
-    case SMA_ISLAND:
-    case VICTRON:
-    case HUAWEI_MODBUS:
-    case WIBEEE_MODBUS:
-    case INGETEAM:
-    case SCHNEIDER:
-    case SOLAREDGE:
     case GOODWE:
       if (config.getDataTime < 1000) config.getDataTime = 1000;
       break;
@@ -466,14 +440,10 @@ void defineWebMonitorFields(uint8_t version)
     case ICC_SOLAR: // Icc Solar
       webMonitorFields.data = 0x0F77E006; // 0x0F77E000 
       break;
-    case INGETEAM: // Ingeteam
-      webMonitorFields.data = 0x0F77E006;
-      break;
     case GOODWE: // GoodWe
       webMonitorFields.data = 0x0F77E006;
       break;
     case WIBEEE: // Wibee
-    case WIBEEE_MODBUS: // Wibee Modbus
       webMonitorFields.data = 0x005801E6;
       break;
     case SHELLY_EM: // Shelly EM
@@ -481,36 +451,6 @@ void defineWebMonitorFields(uint8_t version)
       break;
     case FRONIUS_API: // Fronius API
       webMonitorFields.data = 0x00700000;
-      break;
-    case DDS238_METER: // DDS2382
-      webMonitorFields.data = 0x004003EF;
-      break;
-    case DDSU666_METER: // DDSU666
-      webMonitorFields.data = 0x004003EE;
-      break;
-    case SDM_METER: // SDM120/220
-      webMonitorFields.data = 0x00401FFF;
-      break;
-    case SMA_BOY: // SMA
-      webMonitorFields.data = 0x0077E000;
-      break;
-    case SMA_ISLAND: // SMA
-      webMonitorFields.data = 0x07000006;
-      break;
-    case VICTRON: // Victron
-      webMonitorFields.data = 0x0E500006; // 0x06500006 
-      break;
-    case FRONIUS_MODBUS: // Fronius Modbus
-      webMonitorFields.data = 0x0077E006; // 0x0057E006 
-      break;
-    case HUAWEI_MODBUS: // Huawei
-      webMonitorFields.data = 0x0377E000;
-      break;
-    case SOLAREDGE: // SolarEdge
-      webMonitorFields.data = 0x0152A000;
-      break;
-    case SCHNEIDER:
-      webMonitorFields.data = 0x0B100006;
       break;
     default:
       webMonitorFields.data = 0x0177E000;
