@@ -33,7 +33,7 @@ void parseShellyEM(char *json, int sensor)
       case 1: // Medida de Red
         if (root["is_valid"] == true) {
           meter.activePower = inverter.wgrid = roundf((float)root["power"]);
-          meter.voltage = inverter.gridv = roundf((float)root["voltage"]);
+          meter.voltage = roundf((float)root["voltage"]);
           meter.reactivePower = roundf((float)root["reactive"]);
           meter.importActive = roundf((float)root["total"] / 1000.0);
           meter.exportActive = roundf((float)root["total_returned"] / 1000.0);
@@ -43,9 +43,15 @@ void parseShellyEM(char *json, int sensor)
         break;
       case 2: // Medida de Inversor
         if (root["is_valid"] == true) {
-          inverter.wsolar = roundf((float)root["power"]); // Potencia de red (Negativo: de red - Positivo: a red)
-          // inverter.gridv = roundf((float)root["voltage"]);
-          Error.RecepcionDatos = false;
+          if (inverter.isAvailable) {
+            inverter.wsolar = roundf((float)root["power"]); // Potencia de red (Negativo: de red - Positivo: a red)
+            inverter.gridv = roundf((float)root["voltage"]);
+            Error.RecepcionDatos = false;
+          } else {
+            inverter.wsolar = 0;
+            inverter.gridv = 0;
+            Error.RecepcionDatos = false;
+          }
         }
         break;
     }

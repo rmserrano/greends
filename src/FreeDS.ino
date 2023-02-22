@@ -29,7 +29,6 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
-#include <WiFiUdp.h>
 #include <EEPROM.h>
 #include <TickerScheduler.h>
 #include <HardwareSerial.h>
@@ -42,18 +41,19 @@
 #include <SPIFFS.h>
 #include <bitmap.h>
 #include <DNSServer.h>
+#include <esp32ModbusTCP.h>
+#include <EmonLib.h>
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-#include <PID_v1.h>
-
 extern "C"
 {
-#include <crypto/base64.h>
+#include <mbedtls/base64.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/timers.h>
 #include <rom/rtc.h>
+//#include <driver/dac.h>
 #include <driver/adc.h>
 #include <esp_system.h>
 #include <time.h>
@@ -62,7 +62,7 @@ extern "C"
 
 #include "fauxmoESP.h"
 
-#define OLED
+#define OLED 1
 
 #define MAX_SCREENS 5
 
@@ -73,17 +73,17 @@ extern "C"
   #define pin_pwm LED 
 
   // ESP Serial
-  #define pin_rx 17
-  #define pin_tx 5
+//  #define pin_rx 17
+//  #define pin_tx 5
 
   // RELAY PINS
-  #define PIN_RL1 13
-  #define PIN_RL2 12
-  #define PIN_RL3 14
-  #define PIN_RL4 27
+  #define PIN_RL1 3
+  #define PIN_RL2 4
+  #define PIN_RL3 5
+  #define PIN_RL4 6
 
   // ADC PIN
-  #define ADC_INPUT 34
+  #define ADC_INPUT 7
 
   #include "SSD1306.h"
   SSD1306 display(0x3c, SDA_OLED, SCL_OLED);
@@ -95,51 +95,48 @@ extern "C"
   uint8_t pin_pwm = 2;
 
   // ESP Serial
-  uint8_t pin_rx = 16;
-  uint8_t pin_tx = 17;
+  //uint8_t pin_rx = 16;
+  //uint8_t pin_tx = 17;
 
   // RELAY PINS
-  #define PIN_RL1 5
-  #define PIN_RL2 18
-  #define PIN_RL3 19
-  #define PIN_RL4 21
+  //#define PIN_RL1 5
+  //#define PIN_RL2 18
+  //#define PIN_RL3 19
+  //#define PIN_RL4 21
 #endif
 
 // OVERRIDE DEFAULT CONFIG FOR UART1
-#define RX1 19
-#define TX1 23
+//#define RX1 19
+//#define TX1 23
+
+// Debounce control
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 100;
+bool ButtonState = false;
+bool ButtonLongPress = false;
 
 // Variables Globales
 const char compile_date[] PROGMEM = __DATE__ " " __TIME__;
 const char version[] PROGMEM = "1.0.7";
-const char beta[]  PROGMEM = "Rev 2";
 
 const char *www_username = "admin";
 
-// Debounce control
-struct BUTTON_CONTROL
-{
-  unsigned long lastDebounceTime = 0;
-  unsigned long debounceDelay = 100;
-  bool ButtonState = false;
-  bool ButtonLongPress = false;
-  uint8_t screen = 0;
-} button;
+uint16_t invert_pwm = 0; // Hasta 1023 con 10 bits resolution
+uint16_t last_invert_pwm = 0;
 
-// Variables Globales calculo PWM
-struct PWM_CONFIG
-{
-  uint16_t invert_pwm = 0; // Up 1023 with 10 bits resolution.
-  uint16_t targetPwm = 0;
-  uint8_t pwmValue = 0;
-} pwm;
+uint8_t pwmValue = 0;
+uint8_t readClampPos = 0;
 
-struct SLAVE
-{
-  uint8_t workingMode;
-  uint8_t masterMode = 0;
-  uint8_t masterPwmValue = 0;
-} slave;
+uint8_t webMessageResponse = 0;
+boolean processData = false;
+
+uint8_t screen = 0;
+uint8_t workingMode;
+uint8_t masterMode = 0;
+
+uint8_t scanDoneCounter = 0;
+
+IPAddress modbusIP;
 
 // Temporizadores
 struct {
@@ -177,10 +174,7 @@ union {
     uint32_t timerSet : 1;        // Bit 17
     uint32_t pwmIsWorking : 1;    // Bit 18
     uint32_t pwmManAuto : 1;      // Bit 19
-    uint32_t showClampCurrent : 1;// Bit 20
-    uint32_t bootCompleted : 1;   // Bit 21
-    uint32_t tempShutdown : 1;    // Bit 22
-    uint32_t spare : 10;          // Bit 23 - 31
+    uint32_t spare : 12;          // Bit 20 - 31
   };
 } Flags;
 
@@ -230,11 +224,7 @@ typedef union {
     uint32_t offgridVoltage : 1;     // Bit 23
     uint32_t debug5 : 1;             // Bit 24
     uint32_t useClamp : 1;           // Bit 25
-    uint32_t useSolarAsMPTT : 1;     // Bit 26
-    uint32_t useBMV : 1;             // Bit 27
-    uint32_t useExternalMeter : 1;   // Bit 28
-    uint32_t spare : 2;              // Bit 29 - 30
-    uint32_t debugPID : 1;           // Bit 31
+    uint32_t spare : 6;              // Bit 26 - 31
   };
 } SysBitfield;
 
@@ -297,8 +287,8 @@ struct CONFIG
   char dns2[16];
 
   // SALIDAS RELÉS
-  int16_t potTarget;
-  int16_t free16_1;
+  int16_t pwmMin;
+  int16_t pwmMax;
  
   uint16_t R01Min;
   int16_t R01PotOn;
@@ -350,7 +340,7 @@ struct CONFIG
 
   // TEMPORIZADORES
   unsigned long oledControlTime;
-  unsigned long freeTemp;
+  unsigned long pwmControlTime;
   unsigned long maxErrorTime;
   unsigned long getDataTime;
 
@@ -416,26 +406,11 @@ struct CONFIG
   // NTP Server
   char ntpServer[30];
 
-  // Calibration Value
-  float clampCalibration;
-
-  // Clamp Voltage
-  float clampVoltage;
-  
-  // Store PIDValues
-  float PIDValues[3];
-
-  // Battery Offset
-  float voltageOffset;
-
-  // Phase to be used
-  uint8_t gridPhase;
-
-  // Solax Version
-  uint8_t solaxVersion;
+  // Store clampValues
+  float clampValues[20];
 
   // FREE MEMORY
-  uint8_t free[1042];
+  uint8_t free[236];
 } config;
 
 struct METER
@@ -477,8 +452,7 @@ struct INVERTER
   float batterySoC;
   float loadWatts = 0;
   float currentCalcWatts = 0;
-  float acIn = 0;
-  float acOut = 0;
+  bool isAvailable = false;
 } inverter;
 
 struct UPTIME
@@ -524,20 +498,14 @@ struct
 struct tm timeinfo;
 
 #define LOGGINGSIZE 20 //30
-struct LOGGING
-{
-  char loggingMessage[LOGGINGSIZE][1024];
-  int logcount = 0;
-} logMessage;
-
-uint8_t webMessageResponse = 0;
-boolean processData = false;
-
-String scanNetworks[15];
-int32_t rssiNetworks[15];
-uint8_t scanDoneCounter = 0;
+char loggingMessage[LOGGINGSIZE][1024];
+int logcount = 0;
 
 char jsonResponse[768];
+
+// Variables Globales calculo PWM
+uint16_t maxPwm;
+uint16_t targetPwm;
 
 // Definiciones Conexiones
 WiFiMulti wifiMulti;
@@ -548,16 +516,18 @@ AsyncEventSource events("/events");
 AsyncEventSource webLogs("/weblog");
 AsyncMqttClient mqttClient;
 
-HardwareSerial SerieEsp(2);   // RX, TX para esp-01
-DynamicJsonDocument root(4096); // 3072
+static esp32ModbusTCP *modbustcp = NULL;
 
-TickerScheduler Tickers(7);
+//HardwareSerial SerieEsp(2);   // RX, TX para esp-01
+//HardwareSerial SerieMeter(1); // RX, TX para los Meter rs485/modbus
+DynamicJsonDocument root(3072); // 2048
+
+TickerScheduler Tickers(9);
 
 DNSServer dnsServer;
 
 TimerHandle_t relayOnTimer;
 TimerHandle_t relayOffTimer;
-TimerHandle_t startTimer;
 
 // Setup a oneWire instance to communicate with any OneWire devices
 OneWire oneWire(DS18B20);
@@ -565,37 +535,24 @@ OneWire oneWire(DS18B20);
 // Pass our oneWire reference to Dallas Temperature sensor 
 DallasTemperature sensors(&oneWire);
 
-struct TEMPERATURE_CONFIG
-{
-  uint8_t tempSensorAddress[15][8];
-  float temperaturaTermo = -127.0;
-  float temperaturaTriac = -127.0;
-  float temperaturaCustom = -127.0;
-} temperature;
+uint8_t tempSensorAddress[15][8];
+float temperaturaTermo = -127.0;
+float temperaturaTriac = -127.0;
+float temperaturaCustom = -127.0;
 
+// Energy Monitor
+#define GRID_VOLTAGE 230.0 // TO BE ERASED WHEN WILL READ THE VOLTAGE
+#define emonTxV3
 
-// Energy Monitor (Functions from emonLib) https://github.com/openenergymonitor/EmonLib
-#define ADC_BITS    12
-#define ADC_COUNTS  (1<<ADC_BITS)
+EnergyMonitor emon1;
 
-uint8_t inPinI;
-double ICAL;
-double sampleI;
-double filteredI;
-double offsetI;
-double sqI, sumI, Irms;
-
-// PID Declaration
-float Setpoint, PIDInput, PIDOutput;
-
-PID myPID(&PIDInput, &PIDOutput, &Setpoint, 0.05, 0.06, 0.03, PID::DIRECT); // Probando 0.10 0.07 0.04
-
-// GoodWe UDP Config
-WiFiUDP inverterUDP;
-unsigned int localUdpPort = 8899;  // local port to listen on
-uint8_t incomingPacket[512];  // buffer for incoming packets
+#define V_REF 1100  // ADC reference voltage
+esp_adc_cal_characteristics_t *adc_chars = new esp_adc_cal_characteristics_t;
 
 //////////////////// CAPTIVE PORTAL ////////////////
+
+String scanNetworks[15];
+int32_t rssiNetworks[15];
 
 class CaptiveRequestHandler : public AsyncWebHandler {
 public:
@@ -648,7 +605,7 @@ public:
 };
 
 // Declaration of default values
-void shutdownPwm(boolean = false, const char* = "PWM: disabling PWM\n");
+void down_pwm(boolean = true, const char* = "PWM: disabling PWM\n");
 
 ////////// WATCHDOG FUNCTIONS //////////
 
@@ -682,14 +639,15 @@ void defaultValues()
   strcpy(config.pass2, "DSPLUSWIFI2");
   strcpy(config.ssid_esp01, "SOLAXX");
   strcpy(config.password_esp01, "");
-  strcpy(config.sensor_ip, "IPORIGENDATOS");
+  strcpy(config.sensor_ip, "192.168.0.100");
   config.flags.dhcp = true;
   strcpy(config.ip, "192.168.0.99");
   strcpy(config.gw, "192.168.0.1");
   strcpy(config.mask, "255.255.255.0");
   strcpy(config.dns1, "8.8.8.8");
   strcpy(config.dns2, "1.1.1.1");
-  config.potTarget = 60;
+  config.pwmMin = 150;
+  config.pwmMax = 50;
   config.flags.pwmEnabled = true;
   config.relaysFlags.R01Man = false;
   config.relaysFlags.R02Man = false;
@@ -721,13 +679,14 @@ void defaultValues()
   strcpy(config.password, "YWRtaW4=");
   config.flags.oledPower = true;
   config.flags.oledAutoOff = false;
+  config.pwmControlTime = 2000;
   config.oledControlTime = 30000;
   config.getDataTime = 1500;
   config.maxErrorTime = 20000;
   config.manualControlPWM = 50;
   config.autoControlPWM = 60;
   config.flags.pwmMan = false;
-  config.pwmFrequency = 30000;
+  config.pwmFrequency = 3000;
   config.oledBrightness = 255;
   config.baudiosMeter = 9600;
   config.idMeter = 1;
@@ -737,11 +696,8 @@ void defaultValues()
   config.flags.serial = true;
   config.flags.debug1 = false;
   config.flags.debug2 = false;
-  config.flags.debug3 = false;
-  config.flags.debug4 = false;
-  config.flags.debug5 = false;
-  config.flags.debugPID = false;
   config.flags.weblog = true;
+  config.flags.debug4 = false;
   config.publishMqtt = 10000;
   config.flags.timerEnabled = false;
   config.timerStart = 500;
@@ -775,22 +731,11 @@ void defaultValues()
   config.flags.offGrid = false;
   config.soc = 100;
   config.battWatts = -60; // Sólo para ongrid
-  config.flags.offgridVoltage = false;
   config.batteryVoltage = 51.0;
-  config.voltageOffset = 0.30;
   config.maxWattsTariff = 3450;
   config.flags.showEnergyMeter = true;
-  config.flags.useExternalMeter = false;
   config.flags.useClamp = false;
-  config.clampCalibration = 22.3;
-  config.clampVoltage = 230.0;
-  config.PIDValues[0] = 0.05;
-  config.PIDValues[1] = 0.06;
-  config.PIDValues[2] = 0.03;
-  config.gridPhase = 1;
-  config.flags.useBMV = false;
-  config.flags.useSolarAsMPTT = false;
-  config.solaxVersion = 2;
+  memset(config.clampValues, 0, sizeof config.clampValues);
   strcpy(config.tzConfig, "CET-1CEST,M3.5.0,M10.5.0/3");
   strcpy(config.ntpServer, "pool.ntp.org");
   strcpy(config.language, "es");
@@ -801,13 +746,15 @@ void defaultValues()
 
 void configureTickers(void)
 {
-  Tickers.add(0, 400,  [&](void *) { showOledData(); }, nullptr, true);                 // OLED loop
-  Tickers.add(1, 500,  [&](void *) { every500ms(); }, nullptr, false);                  // 500ms functions loop
+  Tickers.add(0, 400,  [&](void *) { data_display(); }, nullptr, true);                 // OLED loop
+  Tickers.add(1, 500,  [&](void *) { send_events(); }, nullptr, false);                 // Send Events to Webpage
   Tickers.add(2, 5000, [&](void *) { connectToMqtt(); }, nullptr, false);               // Reconnect mqtt every 5 seconds
   Tickers.add(3, 5000, [&](void *) { connectToWifi(); }, nullptr, false);               // Reconnect Wifi  every 5 seconds
   Tickers.add(4, config.getDataTime, [&](void *) { getSensorData(); }, nullptr, false); // Sensor data adquisition time
-  Tickers.add(5, config.publishMqtt, [&](void *) { publishMqtt(); }, nullptr, false);   // Publish Mqtt messages
-  Tickers.add(6, 1000, [&](void *) { every1000ms(); }, nullptr, false);                 // 1000ms functions loop
+  Tickers.add(5, config.pwmControlTime, [&](void *) { pwmControl(); }, nullptr, false); // Pwm Control loop
+  Tickers.add(6, config.publishMqtt, [&](void *) { publishMqtt(); }, nullptr, false);   // Publish Mqtt messages
+  Tickers.add(7, 1000, [&](void *) { every1000ms(); }, nullptr, false);                 // 1000ms functions loop
+  Tickers.add(8, 6000, [&](void *) { storeClampValues(); }, nullptr, false);            // Store Clamp Values
   Tickers.disableAll();
 }
 
@@ -825,18 +772,24 @@ void setup()
   // ENERGY MONITOR
   adc1_config_width(ADC_WIDTH_BIT_12);
   adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);
+  //esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc_chars);
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc_chars);
   
+  analogReadResolution(12);
+
+  emon1.current(ADC_INPUT, 32.6); // 2000 Turns / 62 Ohms burden resistor SCT-013 30A/1V
+
   Flags.data = 0; // All Bits to false
   Flags.RelayTurnOn = true;
 
   Serial.begin(115200); // Se inicia la UART0 para debug1
   Serial.setDebugOutput(true);
   
-  verbosePrintResetReason(0);
-  verbosePrintResetReason(1);
+  verbose_print_reset_reason(0);
+  verbose_print_reset_reason(1);
   
   // Configuramos las salidas
-  pinMode(PIN_RL1, OUTPUT);
+  /*pinMode(PIN_RL1, OUTPUT);
   pinMode(PIN_RL2, OUTPUT);
   pinMode(PIN_RL3, OUTPUT);
   pinMode(PIN_RL4, OUTPUT);
@@ -844,7 +797,7 @@ void setup()
   digitalWrite(PIN_RL2, LOW);
   digitalWrite(PIN_RL3, LOW);
   digitalWrite(PIN_RL4, LOW);
-
+*/
   //// Comprobación del estado de la configuración
   Serial.printf("Testing EEPROM Library\n");
   Serial.printf("EEPROM Size: %d bytes\n", sizeof(config));
@@ -852,7 +805,7 @@ void setup()
   if (!EEPROM.begin(sizeof(config)))
   {
     Serial.printf("Failed to initialise EEPROM\nRestarting...\n");
-    shutdownPwm(true);
+    down_pwm(false);
     delay(1000);
     ESP.restart();
   }
@@ -861,16 +814,18 @@ void setup()
   checkEEPROM();
 
   // Initialize SPIFFS
-  if (!SPIFFS.begin(true, "/spiffs", 40))
+  if (!SPIFFS.begin(true))
   {
     INFOV("An Error has occurred while mounting SPIFFS\n");
     return;
   } else { readLanguages(); }
 
   // Initialize channels
+  ledcSetup(2, config.pwmFrequency, 10); // Frecuencia según configuración, 10-bit resolution
   ledcAttachPin(pin_pwm, 2);
-  ledcSetup(2, (double)config.pwmFrequency / 10.0, 10); // Frecuencia según configuración, 10-bit resolution
-  ledcWrite(2, 0); // turn off
+  ledcWrite(2, invert_pwm);
+
+  //dac_output_enable(DAC_CHANNEL_2); // Salida Analógica /// DAC_CHANNEL_1 -> PIN 25 /// DAC_CHANNEL_2 -> PIN 26
 
   // OLED
 #ifdef OLED
@@ -893,8 +848,6 @@ void setup()
     saveEEPROM();
   }
 
-  current(ADC_INPUT, config.clampCalibration); // 2000 Turns / 62 Ohms burden resistor SCT-013 30A/1V
-
   // Si no está confgurada la wifi, creamos un Punto de acceso con el SSID FreeDS
   if (!config.flags.wifi)
   {
@@ -913,7 +866,6 @@ void setup()
     // Relay Timers
     relayOnTimer = xTimerCreate("relayOnTimer", pdMS_TO_TICKS(5000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(enableRelay));
     relayOffTimer = xTimerCreate("relayOffTimer", pdMS_TO_TICKS(5000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(disableRelay));
-    startTimer = xTimerCreate("startTimer", pdMS_TO_TICKS(45000), pdFALSE, (void *)0, reinterpret_cast<TimerCallbackFunction_t>(bootTimer));
 
     WiFi.onEvent(WiFiEvent);
 
@@ -932,17 +884,18 @@ void setup()
 
     if (wifiMulti.run() == WL_CONNECTED) // Si conecta continuamos
     {
+INFOV("WIFI connected\n");
       Error.ConexionWifi = false;
 
 #ifdef OLED
       showLogo("IP: " + WiFi.localIP().toString(), true);
 #endif
-      
-      buildWifiArray();
-
+INFOV("Showlogo\n");
+     buildWifiArray();
+INFOV("buildWifiArray\n");
+delay(2000);
       // Init, Configure and get the ntp time
-      // if (config.wversion != SOLAX_V2_LOCAL) {
-      if (strcmp("5.8.8.8", config.sensor_ip) != 0) {
+      if (config.wversion != SOLAX_V2_LOCAL) {
         configTzTime(config.tzConfig, config.ntpServer);
         updateLocalTime();
       }
@@ -950,9 +903,18 @@ void setup()
       Flags.pwmIsWorking = true;
 
       // SERIAL
-      SerieEsp.begin(115200, SERIAL_8N1, pin_rx, pin_tx); // UART2 para ESP01
+      //SerieMeter.begin(config.baudiosMeter, SERIAL_8N1, RX1, TX1); // UART1 para meter
+      //SerieEsp.begin(115200, SERIAL_8N1, pin_rx, pin_tx); // UART2 para ESP01
       
-      if (config.wversion == SOLAX_V2) { SerieEsp.printf("SSID: %s\n", config.ssid_esp01); }
+      //if (config.wversion == SOLAX_V2) { SerieEsp.printf("SSID: %s\n", config.ssid_esp01); }
+
+      if (config.wversion == SMA_BOY || (config.wversion >= VICTRON && config.wversion <= SOLAREDGE)) {
+        modbusIP.fromString((String)config.sensor_ip);
+        if (config.wversion == SMA_BOY || (config.wversion >= VICTRON && config.wversion <= WIBEEE_MODBUS)) {
+          modbustcp = new esp32ModbusTCP(modbusIP, 502);
+        } else { modbustcp = new esp32ModbusTCP(modbusIP, 1502); }
+        configModbusTcp();
+      }
 
       INFOV("Welcome to FreeDS\n");
       INFOV("Hostname: %s\n", config.hostServer);
@@ -979,15 +941,15 @@ void setup()
 
       if (config.flags.pwmEnabled && !config.flags.pwmMan)
       {
-        slave.workingMode = 0;
+        workingMode = 0;
       } // AUTO
       else if (config.flags.pwmEnabled && config.flags.pwmMan)
       {
-        slave.workingMode = 1;
+        workingMode = 1;
       } // MANUAL
       else
       {
-        slave.workingMode = 2;
+        workingMode = 2;
       } // OFF
 
       Error.RecepcionDatos = true;
@@ -997,26 +959,8 @@ void setup()
       sensors.begin();
       sensors.setResolution(9);
       buildSensorArray();
-
       setWebConfig();
       defineWebMonitorFields(config.wversion);
-    }
-
-    // Esperamos 45 segundos a que se estabilicen las lecturas de la pinza antes de mostrarlas en la web.
-    xTimerStart(startTimer, 0);
-
-    // PID Config
-    myPID.SetSampleTime(1000);
-    config.flags.dimmerLowCost ? myPID.SetOutputLimits(209, config.maxPwmLowCost) : myPID.SetOutputLimits(0, 1023);
-    config.flags.pwmMan ? myPID.SetMode(PID::MANUAL) : myPID.SetMode(PID::AUTOMATIC);
-    config.flags.changeGridSign ? myPID.SetControllerDirection(PID::DIRECT) : myPID.SetControllerDirection(PID::REVERSE);
-    myPID.SetTunings(config.PIDValues[0], config.PIDValues[1], config.PIDValues[2], PID::P_ON_M);
-    Setpoint = config.potTarget;
-
-    // GOODWE UDP SETUP
-    if (config.wversion == GOODWE) {
-      inverterUDP.begin(localUdpPort);
-      INFOV("Now listening at IP %s, UDP port %d\n", WiFi.localIP().toString().c_str(), localUdpPort);
     }
   }
 
@@ -1031,8 +975,6 @@ void setup()
     display.drawString(64, 40, lang._CONFIGPAGE_);
     display.display();
   }
-  
-  // DEBUG
   memset(config.free, 255, sizeof config.free);
 }
 
@@ -1048,42 +990,41 @@ void loop()
   /////////////////////////////////////
 
   updateUptime();
-
-  Flags.firstInit ? dnsServer.processNextRequest() : fauxmo.handle();
+  
+  if (Flags.firstInit) { dnsServer.processNextRequest(); }
+  else { fauxmo.handle(); }
 
   if (config.flags.wifi && !Flags.firstInit)
   {
-    Tickers.update(); // Actualiza todas los tareas Temporizadas
-
-    if (processData) { processingData(); }
-    
+    Tickers.update(); // Actualiza todos los tareas Temporizadas
     changeScreen();
-    
-    if (config.wversion == GOODWE) { parseUDP(); }
-
-    // PID Check Loop
-    if (config.flags.pwmEnabled && !Error.VariacionDatos && !Error.RecepcionDatos && Flags.pwmIsWorking && myPID.GetMode() == PID::AUTOMATIC && myPID.Compute()) {
-      pwm.targetPwm = pwm.invert_pwm = (uint16_t)PIDOutput;
-      if (config.flags.dimmerLowCost && pwm.invert_pwm <= 210) { pwm.invert_pwm = 0; }
-      writePwmValue(pwm.invert_pwm);
-    }
-    
     if (config.flags.sensorTemperatura) { checkTemperature(); }
     
+    long diffErrorRecepcionDatos = millis() - timers.ErrorRecepcionDatos ;
+    if ( diffErrorRecepcionDatos < 0) diffErrorRecepcionDatos = 0;
+
     if (config.flags.debug4) { 
       if (millis() - timers.printDebug > 2000){
-        INFOV("\n");
-        INFOV("Error Recepción Datos: %s, Error Variación Datos: %s, Error Conexión Mqtt: %s\n", Error.RecepcionDatos ? "true" : "false", Error.VariacionDatos ? "true" : "false", Error.ConexionMqtt ? "true" : "false");
+        INFOV("\nError Recepción Datos: %s, Error Variación Datos: %s, Error Conexión Mqtt: %s\n", Error.RecepcionDatos ? "true" : "false", Error.VariacionDatos ? "true" : "false", Error.ConexionMqtt ? "true" : "false");
         INFOV("Timer Recepción Datos: %ld, Timer Variación Datos: %ld\n", millis() - timers.ErrorRecepcionDatos, millis() - timers.ErrorVariacionDatos);
-        INFOV("Modo Manual: %d, Modo Manual Automático: %d, PwmIsWorking: %d, pwm.invert_pwm: %d, pwm.targetPwm: %d, battery: %.02f\n", config.flags.pwmMan, Flags.pwmManAuto, Flags.pwmIsWorking, pwm.invert_pwm, pwm.targetPwm, inverter.batteryWatts);
-        INFOV("Rele 1: %s, Rele 2: %s, Rele 3: %s, Rele 4:%s\n", digitalRead(PIN_RL1) ? "ON" : "OFF", digitalRead(PIN_RL2) ? "ON" : "OFF", digitalRead(PIN_RL3) ? "ON" : "OFF", digitalRead(PIN_RL4) ? "ON" : "OFF");
+        INFOV("Modo Manual: %d, Modo Manual Automático: %d, PwmIsWorking: %d, invert_pwm: %d, targetPwm: %d, battery: %.02f\n", config.flags.pwmMan, Flags.pwmManAuto, Flags.pwmIsWorking, invert_pwm, targetPwm, inverter.batteryWatts);
+        //INFOV("Rele 1: %s, Rele 2: %s, Rele 3: %s, Rele 4:%s\n", digitalRead(PIN_RL1) ? "ON" : "OFF", digitalRead(PIN_RL2) ? "ON" : "OFF", digitalRead(PIN_RL3) ? "ON" : "OFF", digitalRead(PIN_RL4) ? "ON" : "OFF");
         //INFOV("Error Temp 1: %ld, Error Temp 2: %ld, Error Temp 3: %ld", millis() - timers.ErrorLecturaTemperatura[0], millis() - timers.ErrorLecturaTemperatura[1], millis() - timers.ErrorLecturaTemperatura[2]);
         timers.printDebug = millis();
       }
     }
+
+    if (diffErrorRecepcionDatos > config.maxErrorTime && !Error.RecepcionDatos)
+    {
+      if (config.flags.debug1) { INFOV("DATA ERROR: Error de comunicación, Diff: %ld, Errortime: %ld\n", diffErrorRecepcionDatos, config.maxErrorTime); }
+      memset(&inverter, 0, sizeof(inverter));
+      memset(&meter, 0, sizeof(meter));
+      Error.RecepcionDatos = true;
+    }
+
+    if (processData) { processingData(); }
     
-    // if (config.wversion != SOLAX_V2_LOCAL && Flags.ntpTime) {
-    if (strcmp("5.8.8.8", config.sensor_ip) != 0 && Flags.ntpTime) {
+    if (config.wversion != SOLAX_V2_LOCAL && Flags.ntpTime) {
       checkTimer();
       updateLocalTime();
     }
@@ -1113,6 +1054,6 @@ void loop()
       if (inverter.wsolar > config.potManPwm && Flags.pwmManAuto) {
         Flags.pwmManAuto = false;
       }
-    }
+    } 
   }
 } // End loop

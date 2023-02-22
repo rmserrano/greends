@@ -61,8 +61,6 @@ class SSD1306Brzo : public OLEDDisplay {
     }
 
     void display(void) {
-      const int x_offset = (128 - this->width()) / 2;
-
     #ifdef OLEDDISPLAY_DOUBLE_BUFFER
        uint8_t minBoundY = UINT8_MAX;
        uint8_t maxBoundY = 0;
@@ -74,9 +72,9 @@ class SSD1306Brzo : public OLEDDisplay {
 
        // Calculate the Y bounding box of changes
        // and copy buffer[pos] to buffer_back[pos];
-       for (y = 0; y < (this->height() / 8); y++) {
-         for (x = 0; x < this->width(); x++) {
-          uint16_t pos = x + y * this->width();
+       for (y = 0; y < (displayHeight / 8); y++) {
+         for (x = 0; x < displayWidth; x++) {
+          uint16_t pos = x + y * displayWidth;
           if (buffer[pos] != buffer_back[pos]) {
             minBoundY = _min(minBoundY, y);
             maxBoundY = _max(maxBoundY, y);
@@ -94,26 +92,23 @@ class SSD1306Brzo : public OLEDDisplay {
        if (minBoundY == UINT8_MAX) return;
 
        sendCommand(COLUMNADDR);
-       sendCommand(x_offset + minBoundX);
-       sendCommand(x_offset + maxBoundX);
+       sendCommand(minBoundX);
+       sendCommand(maxBoundX);
 
        sendCommand(PAGEADDR);
        sendCommand(minBoundY);
        sendCommand(maxBoundY);
 
        byte k = 0;
-
-       int buflen = ( this->width() / 8 ) + 1;
-
-       uint8_t sendBuffer[buflen];
+       uint8_t sendBuffer[17];
        sendBuffer[0] = 0x40;
        brzo_i2c_start_transaction(this->_address, BRZO_I2C_SPEED);
        for (y = minBoundY; y <= maxBoundY; y++) {
            for (x = minBoundX; x <= maxBoundX; x++) {
                k++;
-               sendBuffer[k] = buffer[x + y * this->width()];
-               if (k == (buflen-1))  {
-                 brzo_i2c_write(sendBuffer, buflen, true);
+               sendBuffer[k] = buffer[x + y * displayWidth];
+               if (k == 16)  {
+                 brzo_i2c_write(sendBuffer, 17, true);
                  k = 0;
                }
            }
@@ -124,28 +119,28 @@ class SSD1306Brzo : public OLEDDisplay {
      #else
        // No double buffering
        sendCommand(COLUMNADDR);
-
-       sendCommand(x_offset);
-       sendCommand(x_offset + (this->width() - 1));
+       sendCommand(0x0);
+       sendCommand(0x7F);
 
        sendCommand(PAGEADDR);
        sendCommand(0x0);
-       sendCommand((this->height() / 8) - 1);
 
-       int buflen = ( this->width() / 8 ) + 1;
+       if (geometry == GEOMETRY_128_64) {
+         sendCommand(0x7);
+       } else if (geometry == GEOMETRY_128_32) {
+         sendCommand(0x3);
+       }
 
-       uint8_t sendBuffer[buflen];
+       uint8_t sendBuffer[17];
        sendBuffer[0] = 0x40;
-
        brzo_i2c_start_transaction(this->_address, BRZO_I2C_SPEED);
-
        for (uint16_t i=0; i<displayBufferSize; i++) {
-         for (uint8_t x=1; x<buflen; x++) {
+         for (uint8_t x=1; x<17; x++) {
            sendBuffer[x] = buffer[i];
            i++;
          }
          i--;
-         brzo_i2c_write(sendBuffer,  buflen,  true);
+         brzo_i2c_write(sendBuffer,  17,  true);
          yield();
        }
        brzo_i2c_end_transaction();

@@ -1,45 +1,18 @@
 Versión 1.0.7
 
-	- Solucionado bug usando el programador cuando el control por temperatura está activado.
-	- Solucionado bug usando el programador en la implemetación con PID.
-	- Solucionado bug con el comando para reiniciar los contadores.
-	- Solucionado bug en el cambio de contraseña según su longitud.
-	- Solucionado bug por el que freeDS no era detectado por Alexa.
+	- Solucionado fallo usando el programador cuando el control por temperatura está activado.
+	- Solucionado fallo con el comando para reiniciar los contadores.
 	- Cambio de posición del parametro "Parche derivador lowcost", para evitar confusiones (sugerido por F. Cadenas) y mejoras en el entorno web.
 	- Deshabilitada la opción de programador si no ha actualizado la hora correctamente.
 	- Añadida la posibilidad de cambiar el topic del SoC con el modo ICC Solar.
 	- Implementación Wibee Modbus (falta comprobar funcionamiento según versión de firmware)
 	- Añadido comando por consola para cambiar entre Soc / Voltaje de batería como modo de funcionamiento en instalaciones aisladas. (offgridVoltage 1 / offgridVoltage 0)
-	- Añadido comando para controlar el offset del nivel de voltaje en batería. (voltageOffset para comprobar valor actual, voltageOffset valor (ej. 0.30) para establecerlo)
-	- Añadida la compatibilidad con pinza amperimétrica para la obtención de una lectura más real del consumo del termo, junto a los comandos:
-		- useClamp 1 / useClamp 0 para activar / desactivar el uso de la pinza
-		- clampCalibration / clampCalibration valor (ej. 20.3) para visualizar valor actual / establecer valor
-		- clampVoltage / clampVoltage voltaje (ej. 324.5) para visualizar valor actual / establecer valor para la obtención de la potencia actual (W = V * I)
-		- showClampCurrent 1 / showClampCurrent 0 para mostrar / ocultar la itensidad medida por la pinza amperimétrica, es útil para su calibracion mediante pinza externa.
 	- Añadido comando para configurar el servidor ntp (pool.ntp.org por defecto), uso: ntpServer ip / nombre_servidor (Ejemplo: ntpServer pool.ntp.org)
 	- Mejorada la estabilidad en la lectura de los datos de wibeee. (gracias a David y Felipe por las pruebas).
-	- Añadidas dos frecuencias para su uso con el ultra low cost (12.5 y 25 Hz) y cambio de escala de frecuencia almacenada.
+	- Añadidas dos frecuencias para su uso con el ultra low cost (12 y 25 Hz).
 	- Añadida opción para restaurar y descargar el fichero de configuración dentro de la página de Actualización.
-	- Tamaño de eeprom ampliado a 2048 bytes (2Kb)
-	- Cambiado el control de potencia por un control PID (Gracias a Ciafe por "forzarme" a probar los PID con FreeDS y sus consejos, asi como también a Bisha, Aeizoon y Lolo por sus pruebas)
-	- Añadido comando para el ajuste de los valors del PID (tunePID 0.05;0.06;0.03)
-	- Añadida representación gráfica de los datos en la web inteface.
-	- Añadido soporte para baterías en los modos Solax V2, en la V3 todavía no está implementado por no haber sido probado.
 
-- Revisión 1
-
-	- Solucionados problemas de representación en la interface web.
-
-- Revisión 2
-	- Solucionados problemas con la actualización del estado de los relés.
-	- Solucionado error por el que cuando la fuente de datos reporta una carga total de consumo de 0W, no se mostraba la carga calculada por freeDS. (Reloj Casa)
-	- VICTRON: Comando "useSolarAsMPTT 1 / 0", Si está activado suma los valores de acIn + acOut a la potencia solar.
-	- VICTRON: Comando "useBMV 1 / 0", si está activado suma al valor de la batería el valor de la potencia solar.
-	- MQTT: Añadida la publicación de los campos batteryWatts, batterySoC, loadWatts y AcIn, AcOut (solo usados por victron)
-
-	- TODO: Terminar de implementar la selección de Fase a usar si lo soporta la fuente de datos a usar.
-	- TODO: Añadir programador horario según el día de la semana (por terminar la mejor forma, por ejemplo tipo Tasmota)
-	- TODO: Añadir selección de puerto modbus tcp
+	- TODO: Permitir exportar la configuración en json y restaurarla posteriormente.
 	- TODO: Activar relé cuando el nivel de batería llegue baje de un valor determinado
 	- TODO: Añadir contador de energía usada en la derivación (con pinza amperimétrica)
   	- TODO: pinwatchdog o reinicio preventivo programable

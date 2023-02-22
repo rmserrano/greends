@@ -187,24 +187,6 @@ void AsyncWebServerRequest::_removeNotInterestingHeaders(){
   }
 }
 
-// void AsyncWebServerRequest::_removeNotInterestingHeaders(){
-//   if (_interestingHeaders.containsIgnoreCase("ANY")) {
-//     return; // nothing to do
-//   }
-//   // When removing items from the list, we must increase the iterator first
-//   // before removing the current item, otherwise the iterator is invalidated
-//   // So, no for(;;) loop can be used, see: https://stackoverflow.com/q/596162
-//   auto i_header = _headers.begin();
-//   const auto i_end = _headers.end();
-//   while (i_header != i_end){
-//       const auto header = *i_header;
-//       ++i_header;
-//       if(!_interestingHeaders.containsIgnoreCase(header->name().c_str())){
-//         _headers.remove(header);
-//       }
-//   }
-// }
-
 void AsyncWebServerRequest::_onPoll(){
   //os_printf("p\n");
   if(_response != NULL && _client != NULL && _client->canSend() && !_response->_finished()){
@@ -332,10 +314,6 @@ bool AsyncWebServerRequest::_parseReqHeader(){
   if(index){
     String name = _temp.substring(0, index);
     String value = _temp.substring(index + 2);
-
-    // String value = _temp.substring(index + 1);
-    // value.trim();
-    
     if(name.equalsIgnoreCase("Host")){
       _host = value;
     } else if(name.equalsIgnoreCase("Content-Type")){

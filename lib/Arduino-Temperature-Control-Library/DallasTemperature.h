@@ -158,9 +158,7 @@ public:
 	// Is a conversion complete on the wire? Only applies to the first sensor on the wire.
 	bool isConversionComplete(void);
 
-  static uint16_t millisToWaitForConversion(uint8_t);
-  
-  uint16_t millisToWaitForConversion();
+  int16_t millisToWaitForConversion(uint8_t);
   
   // Sends command to one device to save values from scratchpad to EEPROM by index
   // Returns true if no errors were encountered, false indicates failure
@@ -246,9 +244,6 @@ public:
 	// convert from raw to Celsius
 	static float rawToCelsius(int16_t);
 
-    // convert from Celsius to raw
-	static int16_t celsiusToRaw(float);
-
 	// convert from raw to Fahrenheit
 	static float rawToFahrenheit(int16_t);
 
@@ -261,8 +256,6 @@ public:
 	void operator delete(void*);
 
 #endif
-
-	void blockTillConversionComplete(uint8_t);
 
 private:
 	typedef uint8_t ScratchPad[9];
@@ -299,6 +292,7 @@ private:
 	// reads scratchpad and returns the raw temperature
 	int16_t calculateTemperature(const uint8_t*, uint8_t*);
 
+	void blockTillConversionComplete(uint8_t);
 
 	// Returns true if all bytes of scratchPad are '\0'
 	bool isAllZeros(const uint8_t* const scratchPad, const size_t length = 9);

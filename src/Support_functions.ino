@@ -35,8 +35,19 @@ void getSensorData(void)
       case SLAVE_MODE: // Master FreeDS
         runAsyncClient();
         break;
-      case GOODWE: // GoodWe
-        sendUDPRequest();
+      case DDS238_METER: // DDS2382
+      case DDSU666_METER: // DDSU666
+      case SDM_METER: // SDM120/220
+      case SMA_BOY: // SMA
+      case SMA_ISLAND: // SMA
+      case VICTRON: // Victron
+      case FRONIUS_MODBUS: // Fronius Modbus
+      case HUAWEI_MODBUS: // Huawei
+      case SOLAREDGE: // SolarEdge
+      case WIBEEE_MODBUS: // Wibeee Modbus
+      case SCHNEIDER:
+      case MUSTSOLAR: // MustSolar
+        readModbus();
         break;
     }
   }
@@ -56,30 +67,29 @@ void setGetDataTime(void)
       if (config.getDataTime < 1000) config.getDataTime = 1000;
       break;
     case SLAVE_MODE:
-      if (config.getDataTime < 1000) config.getDataTime = 1000;
+      if (config.getDataTime < 500) config.getDataTime = 500;
       break;
-    case GOODWE:
+    case FRONIUS_MODBUS:
+      if (config.getDataTime < 250) config.getDataTime = 250;
+      break;
+    case SMA_BOY:
+    case SMA_ISLAND:
+    case VICTRON:
+    case HUAWEI_MODBUS:
+    case WIBEEE_MODBUS:
+    case SCHNEIDER:
+    case SOLAREDGE:
       if (config.getDataTime < 1000) config.getDataTime = 1000;
       break;
   }
   Tickers.updatePeriod(4, config.getDataTime);
 }
 
-void every500ms(void)
-{
-  sendEvents(); // Send web events
-  readClamp(); // Read Current Clamp
-  pwmControl(); // Pwm Control Loop
-  PIDInput = config.flags.offGrid ? inverter.batteryWatts : inverter.wgrid; // Update PIDInput
-}
-
 void every1000ms(void)
 {
   calcWattsToday(); // Calculate the imported / exported energy
+  readClamp(); // Read Current Clamp
   if (config.flags.sensorTemperatura) { calcDallasTemperature(); } // Read temp sensors
-  if (config.flags.debugPID) {
-    INFOV("I%.02f,O%.02f,T%.02f,PWM%d,P%d,MODE:%d,DIRECTION:%d\n", PIDInput, PIDOutput, Setpoint, pwm.invert_pwm, pwm.pwmValue, myPID.GetMode(), myPID.GetDirection());
-  }
 }
 
 String midString(String *str, String start, String finish){
@@ -138,22 +148,22 @@ void changeScreen(void)
   if (digitalRead(0) == LOW)
   {
 
-    if (button.ButtonState == false && (millis() - button.lastDebounceTime) > button.debounceDelay)
+    if (ButtonState == false && (millis() - lastDebounceTime) > debounceDelay)
     {
-      button.ButtonState = true;
-      button.lastDebounceTime = millis();
+      ButtonState = true;
+      lastDebounceTime = millis();
     }
 
     // Cambio de modo de trabajo
-    if (((millis() - button.lastDebounceTime) > 2000) && button.ButtonLongPress == false)
+    if (((millis() - lastDebounceTime) > 2000) && ButtonLongPress == false)
     {
-      button.ButtonLongPress = true;
-      slave.workingMode++;
-      if (slave.workingMode > 2)
+      ButtonLongPress = true;
+      workingMode++;
+      if (workingMode > 2)
       {
-        slave.workingMode = 0;
+        workingMode = 0;
       }
-      switch (slave.workingMode)
+      switch (workingMode)
       {
       case 0: // AUTO
         config.flags.pwmEnabled = true;
@@ -174,13 +184,13 @@ void changeScreen(void)
     }
 
     // // Apagar y encender la pantalla
-    // if (((millis() - button.lastDebounceTime) > 5000) && button.ButtonLongPress == false)
+    // if (((millis() - lastDebounceTime) > 5000) && ButtonLongPress == false)
     // {
-    //   button.ButtonLongPress = true;
+    //   ButtonLongPress = true;
     //   turnOffOled();
     // }
 
-    if ((millis() - button.lastDebounceTime) > 10000)
+    if ((millis() - lastDebounceTime) > 10000)
     {
       defaultValues();
       restartFunction();
@@ -188,16 +198,16 @@ void changeScreen(void)
   }
   else
   {
-    if (button.ButtonState == true)
+    if (ButtonState == true)
     {
-      if (button.ButtonLongPress == true)
+      if (ButtonLongPress == true)
       {
-        button.ButtonLongPress = false;
-        button.ButtonState = false;
+        ButtonLongPress = false;
+        ButtonState = false;
       }
       else
       {
-        button.ButtonState = false;
+        ButtonState = false;
         timers.OledAutoOff = millis();
         if (config.flags.oledAutoOff && !config.flags.oledPower)
         {
@@ -206,10 +216,10 @@ void changeScreen(void)
         }
         else
         {
-          button.screen++;
-          if (button.screen > MAX_SCREENS)
+          screen++;
+          if (screen > MAX_SCREENS)
           {
-            button.screen = 0;
+            screen = 0;
           }
         }
       }
@@ -228,7 +238,7 @@ void restartFunction(void)
   
   if (!Flags.firstInit)
   {
-    shutdownPwm(true, "PWM Down: Restarting\n");
+    down_pwm(false);
   }
 
   saveEEPROM();
@@ -325,15 +335,15 @@ uint16_t getMin(uint16_t n)
 void checkTimer(void)
 {
   if (config.flags.timerEnabled && Flags.ntpTime) {
-    boolean flagChangeToManual = false;
+    boolean changeToManual = false;
   
     if (getHour(config.timerStart) <= getHour(config.timerStop)) {
       if (((timeinfo.tm_hour == getHour(config.timerStart) && timeinfo.tm_min >= getMin(config.timerStart)) || timeinfo.tm_hour > getHour(config.timerStart)) &&
           ((timeinfo.tm_hour == getHour(config.timerStop) && timeinfo.tm_min < getMin(config.timerStop)) || timeinfo.tm_hour < getHour(config.timerStop)) )
       {
-        flagChangeToManual = true;
+        changeToManual = true;
       } else {
-        flagChangeToManual = false;
+        changeToManual = false;
       }
     }
 
@@ -341,20 +351,19 @@ void checkTimer(void)
         if (((timeinfo.tm_hour == getHour(config.timerStart) && timeinfo.tm_min >= getMin(config.timerStart)) || timeinfo.tm_hour > getHour(config.timerStart)) &&
               timeinfo.tm_hour <= 23)
         {
-          flagChangeToManual = true;
+          changeToManual = true;
         } else if ((timeinfo.tm_hour == getHour(config.timerStop) && timeinfo.tm_min < getMin(config.timerStop)) || timeinfo.tm_hour < getHour(config.timerStop)) {
-          flagChangeToManual = true;
+          changeToManual = true;
         } else if ((timeinfo.tm_hour == getHour(config.timerStop) && timeinfo.tm_min > getMin(config.timerStop)) || timeinfo.tm_hour > getHour(config.timerStop))  {
-          flagChangeToManual = false;
+          changeToManual = false;
         }
     }
         
-    if (flagChangeToManual) {
+    if (changeToManual) {
       if (!Flags.timerSet) { 
         INFOV("Timer started\n");
         Flags.timerSet = true;
         config.flags.pwmMan = true;
-        changeToManual();
         if (config.modoTemperatura != 3) { Flags.pwmIsWorking = true; }
       }
     } else {
@@ -362,26 +371,10 @@ void checkTimer(void)
         INFOV("Timer stopped\n");
         Flags.timerSet = false;
         config.flags.pwmMan = false;
-        saveEEPROM();
-        changeToAuto();
         if (config.modoTemperatura != 3) { Flags.pwmIsWorking = true; }
       }
     }
   }
-}
-
-void changeToManual(void)
-{
-  myPID.SetMode(PID::MANUAL);
-  PIDOutput = 0;
-  Setpoint = 0;
-}
-
-void changeToAuto(void)
-{
-  myPID.SetMode(PID::AUTOMATIC);
-  myPID.SetCurrentOutput(pwm.invert_pwm);
-  Setpoint = config.potTarget;
 }
 
 void calcWattsToday()
@@ -426,24 +419,22 @@ void defineWebMonitorFields(uint8_t version)
   switch (version)
   {
     case SOLAX_V2: // Solax v2
-      webMonitorFields.data = 0x07FFE006;
+      webMonitorFields.data = 0x0177E000;
       break;
     case SOLAX_V2_LOCAL: // Solax v2 local mode
-      webMonitorFields.data = 0x07FFE006;
+      webMonitorFields.data = 0x0177E000;
       break;
     case SOLAX_V1: // Solax v1
-      webMonitorFields.data = 0x07FFE006; // 0x0177E000
+      webMonitorFields.data = 0x0177E000;
       break;
     case MQTT_BROKER: // Mqtt
       webMonitorFields.data = 0x0177E000;
       break;
     case ICC_SOLAR: // Icc Solar
-      webMonitorFields.data = 0x0F77E006; // 0x0F77E000 
-      break;
-    case GOODWE: // GoodWe
-      webMonitorFields.data = 0x0F77E006;
+      webMonitorFields.data = 0x0F77E000;
       break;
     case WIBEEE: // Wibee
+    case WIBEEE_MODBUS: // Wibee Modbus
       webMonitorFields.data = 0x005801E6;
       break;
     case SHELLY_EM: // Shelly EM
@@ -452,13 +443,43 @@ void defineWebMonitorFields(uint8_t version)
     case FRONIUS_API: // Fronius API
       webMonitorFields.data = 0x00700000;
       break;
+    case DDS238_METER: // DDS2382
+      webMonitorFields.data = 0x004003EF;
+      break;
+    case DDSU666_METER: // DDSU666
+      webMonitorFields.data = 0x004003EE;
+      break;
+    case SDM_METER: // SDM120/220
+      webMonitorFields.data = 0x00401FFF;
+      break;
+    case SMA_BOY: // SMA
+      webMonitorFields.data = 0x0077E000;
+      break;
+    case SMA_ISLAND: // SMA
+      webMonitorFields.data = 0x07000006;
+      break;
+    case VICTRON: // Victron
+      webMonitorFields.data = 0x06500006;
+      break;
+    case FRONIUS_MODBUS: // Fronius Modbus
+      webMonitorFields.data = 0x0057E006;
+      break;
+    case HUAWEI_MODBUS: // Huawei
+      webMonitorFields.data = 0x0377E000;
+      break;
+    case SOLAREDGE: // SolarEdge
+      webMonitorFields.data = 0x0152A000;
+      break;
+    case SCHNEIDER:
+      webMonitorFields.data = 0x0B100006;
+      break;
     default:
       webMonitorFields.data = 0x0177E000;
       break;
   }
 }
 
-void verbosePrintResetReason(int cpu)
+void verbose_print_reset_reason(int cpu)
 {
   const char * reason;
 
@@ -520,14 +541,14 @@ void verbosePrintResetReason(int cpu)
 
 void addLog(char *data)
 {
-  if (logMessage.logcount > (LOGGINGSIZE - 1)) { logMessage.logcount = 0; }
+  if (logcount > (LOGGINGSIZE - 1)) { logcount = 0; }
   
   if (Flags.ntpTime) {
-    sprintf(logMessage.loggingMessage[logMessage.logcount], "%02d:%02d:%02d - %s\n", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, data);
+    sprintf(loggingMessage[logcount], "%02d:%02d:%02d - %s\n", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, data);
   } else {
-    sprintf(logMessage.loggingMessage[logMessage.logcount], "%02d:%02d:%02d - %s\n", uptime.Hour, uptime.Minute, uptime.Second, data);
+    sprintf(loggingMessage[logcount], "%02d:%02d:%02d - %s\n", uptime.Hour, uptime.Minute, uptime.Second, data);
   }
-  logMessage.logcount++;
+  logcount++;
 
   if (Flags.weblogConnected) sendWeblogStreamTest();
 }
@@ -535,23 +556,21 @@ void addLog(char *data)
 void sendWeblogStreamTest(void)
 {
   // Print old messages
-  if (strcmp(logMessage.loggingMessage[logMessage.logcount], "") != 0 && logMessage.logcount > 1) {
-    for (int counter = logMessage.logcount; counter < LOGGINGSIZE; counter++)
+  if (strcmp(loggingMessage[logcount], "") != 0 && logcount > 1) {
+    for (int counter = logcount; counter < LOGGINGSIZE; counter++)
     {
-      webLogs.send(logMessage.loggingMessage[counter], "weblog");
-      memset(logMessage.loggingMessage[counter], 0, 1024);
-      delay(3);
+      webLogs.send(loggingMessage[counter], "weblog");
+      memset(loggingMessage[counter], 0, 1024);
     }
   }
 
   // Print new messages
-  for (int counter = 0; counter < logMessage.logcount; counter++) {
-    webLogs.send(logMessage.loggingMessage[counter], "weblog");
-    memset(logMessage.loggingMessage[counter], 0, 1024);
-    delay(3);
+  for (int counter = 0; counter < logcount; counter++) {
+    webLogs.send(loggingMessage[counter], "weblog");
+    memset(loggingMessage[counter], 0, 1024);
   }
 
-  logMessage.logcount = 0;
+  logcount = 0;
 }
 
 // int INFOV(const char * __restrict format, ...)
@@ -597,93 +616,60 @@ float getFragmentation() {
   return 100 - ESP.getMaxAllocHeap() * 100.0 / ESP.getFreeHeap();
 }
 
-void bootTimer(void)
-{
-  xTimerStop(startTimer, 0);
-  Flags.bootCompleted = true;
-}
 
-void readClamp(void)
-{
+void readClamp(void) {
+
   if (config.flags.useClamp) {
-    double amps = calcIrms(1484); // Calculate Irms only
-    if (amps > 0.50) {
-      // inverter.gridv > 0 ? inverter.currentCalcWatts = amps * inverter.gridv : inverter.currentCalcWatts = amps * config.clampVoltage;
-      inverter.currentCalcWatts = amps * config.clampVoltage;
+    double amps = emon1.calcIrms(1480); // Calculate Irms only
+    if (amps > 0.60) {
+      inverter.currentCalcWatts = amps * GRID_VOLTAGE;
     } else { inverter.currentCalcWatts = 0; }
-    // INFOV("Watts: %.03f Current: %.03f\n", inverter.currentCalcWatts, amps);
+    //INFOV("Watts: %.02f Current: %.02f\n", inverter.currentCalcWatts, amps);
   } else {
-    inverter.currentCalcWatts = sq( sin( (pwm.pwmValue / 100.0) * (M_PI_2) ) ) * config.attachedLoadWatts;  
-  }
-}
-
-void current(uint8_t _inPinI, double _ICAL)
-{
-  inPinI = _inPinI;
-  ICAL = _ICAL;
-  offsetI = ADC_COUNTS >> 1;
-}
-
-//--------------------------------------------------------------------------------------
-// Based on Emonlib https://github.com/openenergymonitor/EmonLib
-// 131ms to complete every call
-double calcIrms(unsigned int Number_of_Samples)
-{
-  uint16_t SupplyVoltage = 3300;
-  uint16_t reading = 0;
-
-  for (unsigned int n = 0; n < Number_of_Samples; n++)
-  {
-    reading = analogRead(inPinI);
-    if(reading < 1 || reading > 4095) reading = 0;
-
-    // sampleI = polySolve(reading);
-    sampleI = -0.000000000000016 * pow((double)reading,4) + 0.000000000118171 * pow((double)reading,3)- 0.000000301211691 * pow((double)reading,2)+ 0.001109019271794 * (double)reading + 0.034143524634089;
-
-    // Digital low pass filter extracts the 2.5 V or 1.65 V dc offset,
-    //  then subtract this - signal is now centered on 0 counts.
-    offsetI = (offsetI + (sampleI-offsetI) / ADC_COUNTS);
-    filteredI = sampleI - offsetI;
-
-    // Root-mean-square method current
-    // 1) square current values
-    sqI = filteredI * filteredI;
-    // 2) sum
-    sumI += sqI;
+    inverter.currentCalcWatts = sq( sin( (pwmValue / 100.0) * (M_PI_2) ) ) * config.attachedLoadWatts;
   }
 
-  // double I_RATIO = ICAL *((SupplyVoltage / 1000.0) / (ADC_COUNTS));
-  double I_RATIO = (ICAL * 1000) * ((SupplyVoltage / 1000.0) / (ADC_COUNTS));
-  Irms = I_RATIO * sqrt(sumI / Number_of_Samples);
-
-  //Reset accumulators
-  sumI = 0;
-  //--------------------------------------------------------------------------------------
-  if (Flags.showClampCurrent) { INFOV("Current -> %.02f\n\n", Irms); }
-  // INFOV("Tiempo proceso -> %ld ms\n", millis() - time);
-  return Irms;
 }
 
-double polySolve(double x) {
-  return   2.202196968876e+02
-           +   3.561383996027e-01 * x
-           +   1.276218788985e-04 * pow(x, 2)
-           +  -3.470360275448e-07 * pow(x, 3)
-           +   2.082790802069e-10 * pow(x, 4)
-           +  -5.306931174991e-14 * pow(x, 5)
-           +   4.787659214703e-18 * pow(x, 6);
-}
-
-void writeClampPwm(uint8_t step)
+void storeClampValues(void)
 {
-  pwm.invert_pwm = calculeTargetPwm(2 * (step + 1));
-  writePwmValue(pwm.invert_pwm);
+  double amps = 0;
+      
+  amps = emon1.calcIrms(1480); // Calculate Irms only
+  
+  if (amps > 0.60) {
+    config.clampValues[readClampPos] = amps * GRID_VOLTAGE;
+  } else { config.clampValues[readClampPos] = 0; }
+
+  INFOV("Reading values at %d%%: %.03f Watts\n", 5 * (readClampPos + 1), config.clampValues[readClampPos]);
+
+  readClampPos++;
+
+  if (readClampPos == 20) {
+  
+    // Disable pwm Output
+    down_pwm(false);
+
+    // Disable all timers and enable again the essentials timers
+    Tickers.enableAll();
+    Tickers.disable(2); // Mqtt
+    Tickers.disable(3); // Wifi
+    Tickers.disable(8); // Store Clamp Values
+
+    saveEEPROM();
+  } else { writeClampPwm(); }
+}
+
+void writeClampPwm(void)
+{
+  invert_pwm = calculeTargetPwm(5 * (readClampPos + 1));
+  writePwmValue(invert_pwm);
+  calcPwmProgressBar();
+  INFOV("invert_pwm -> %d\n", invert_pwm);
 }
 
 void writeConfigSpiffs(const char *filename)
 {
-  INFOV("SPIFFS Total: %zu, SPIFFS Used: %zu\n", SPIFFS.totalBytes(), SPIFFS.usedBytes());
-  
   File myFile = SPIFFS.open(filename, FILE_WRITE);
   if(!myFile){
     INFOV("There was an error opening the file for writing\n");
@@ -707,19 +693,6 @@ void readConfigSpiffs(void)
   SPIFFS.remove("/config.bin");
 }
 
-void listSpiffsFiles(void)
-{
-  File root = SPIFFS.open("/");
- 
-  File file = root.openNextFile();
- 
-  while(file)
-  {
-    INFOV("FILE: %s\n", file.name());
-    file = root.openNextFile();
-  }
-}
-
 bool readLanguages(void) {
 
   Serial.printf("Current language: %s\n", config.language);
@@ -733,6 +706,10 @@ bool readLanguages(void) {
   size_t size = langFile.size();
   if (size > 1024) {
     Serial.println("Config file size is too large");
+    return false;
+  }
+  if (size == 0) {
+    Serial.println("Config file size is empty");
     return false;
   }
 
@@ -840,30 +817,10 @@ void checkEEPROM(void) {
   if(config.eeinit == 0x16)
   {
     strcpy(config.SoC_mqtt, "Inverter/BatterySOC");
-    config.flags.offgridVoltage = false;
     config.batteryVoltage = 51.0;
-    config.voltageOffset = 0.30;
     config.flags.useClamp = false;
-    config.PIDValues[0] = 0.05;
-    config.PIDValues[1] = 0.06;
-    config.PIDValues[2] = 0.03;
-    config.clampCalibration = 40.0;
-    config.clampVoltage = 230.0;
-    config.gridPhase = 1;
+    memset(config.clampValues, 0, sizeof config.clampValues);
     strcpy(config.ntpServer, "pool.ntp.org");
-    config.pwmFrequency *= 10;
-    config.potTarget = 60;
-    config.flags.useSolarAsMPTT = false;
-    config.flags.useBMV = false;
-    config.flags.debug1 = false;
-    config.flags.debug2 = false;
-    config.flags.debug3 = false;
-    config.flags.debug4 = false;
-    config.flags.debug5 = false;
-    config.flags.debugPID = false;
-    config.flags.weblog = true;
-    config.solaxVersion = 2;
-    config.flags.useExternalMeter = false;
     config.eeinit = 0x17;
     INFOV(PSTR("EEPROM Settings upgraded from version %x to version %x\n"), actualVersion, config.eeinit);
     saveEEPROM();
